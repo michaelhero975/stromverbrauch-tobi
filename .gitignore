@@ -1,0 +1,7 @@
+# Dropbox lock files
+.~lock.*
+# Excel files (nicht nötig für Deploy)
+*.xlsx
+*.xls
+# macOS
+.DS_Store

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stromverbrauch Dashboard – Tobis Auto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f172a;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 1.5rem;
+  }
+  h1 { font-size: 1.5rem; font-weight: 700; color: #f1f5f9; margin-bottom: 0.25rem; }
+  .subtitle { font-size: 0.875rem; color: #64748b; margin-bottom: 2rem; }
+  .section-title {
+    font-size: 1rem; font-weight: 600; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin: 2rem 0 1rem;
+  }
+
+  /* KPI Cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .kpi-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+  .kpi-label { font-size: 0.75rem; color: #64748b; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  .kpi-value { font-size: 1.75rem; font-weight: 700; color: #38bdf8; line-height: 1; }
+  .kpi-sub { font-size: 0.85rem; color: #94a3b8; margin-top: 0.35rem; }
+  .kpi-card.accent { border-color: #38bdf8; background: #0c1a2e; }
+
+  /* Charts */
+  .chart-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .chart-card canvas { max-height: 280px; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin-bottom: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  thead th {
+    background: #0f172a;
+    color: #64748b;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #334155;
+  }
+  tbody tr { border-bottom: 1px solid #1e293b; transition: background 0.15s; }
+  tbody tr:hover { background: #1e293b; }
+  tbody td { padding: 0.65rem 1rem; color: #cbd5e1; }
+  .highlight-row td { background: #0c2540 !important; color: #38bdf8 !important; font-weight: 600; }
+
+  /* Pagination */
+  .pagination {
+    display: flex; gap: 0.5rem; justify-content: center;
+    align-items: center; margin-top: 1rem; flex-wrap: wrap;
+  }
+  .pagination button {
+    background: #1e293b; border: 1px solid #334155; color: #94a3b8;
+    padding: 0.4rem 0.85rem; border-radius: 6px; cursor: pointer;
+    font-size: 0.8rem; transition: all 0.15s;
+  }
+  .pagination button:hover, .pagination button.active {
+    background: #38bdf8; color: #0f172a; border-color: #38bdf8; font-weight: 600;
+  }
+  .pagination button:disabled { opacity: 0.3; cursor: not-allowed; }
+  #page-info { color: #64748b; font-size: 0.8rem; }
+
+  @media (max-width: 600px) {
+    body { padding: 1rem 0.75rem; }
+    h1 { font-size: 1.2rem; }
+    .kpi-value { font-size: 1.4rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>⚡ Stromverbrauch – Tobis Auto</h1>
+<p class="subtitle" id="last-updated">Letzte Aktualisierung: wird geladen…</p>
+
+<div class="section-title">Übersicht</div>
+<div class="kpi-grid">
+  <div class="kpi-card accent">
+    <div class="kpi-label">Gesamtverbrauch</div>
+    <div class="kpi-value" id="kpi-total-kwh">–</div>
+    <div class="kpi-sub" id="kpi-total-cost">–</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Aktueller Monat</div>
+    <div class="kpi-value" id="kpi-curr-kwh">–</div>
+    <div class="kpi-sub" id="kpi-curr-cost">–</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Letzter Monat</div>
+    <div class="kpi-value" id="kpi-last-kwh">–</div>
+    <div class="kpi-sub" id="kpi-last-cost">–</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Ladevorgänge gesamt</div>
+    <div class="kpi-value" id="kpi-sessions">–</div>
+    <div class="kpi-sub">Einträge in Datenbasis</div>
+  </div>
+</div>
+
+<div class="section-title">Monatsverlauf (kWh)</div>
+<div class="chart-card">
+  <canvas id="monthlyChart"></canvas>
+</div>
+
+<div class="section-title" id="daily-title">Aktueller Monat – Tagesdetails</div>
+<div class="chart-card">
+  <canvas id="dailyChart"></canvas>
+</div>
+
+<div class="section-title">Monatsabrechnung</div>
+<div class="chart-card table-wrap">
+  <table id="monthly-table">
+    <thead>
+      <tr>
+        <th>Monat</th>
+        <th>Ladevorgänge</th>
+        <th>Verbrauch (kWh)</th>
+        <th>Kosten (€)</th>
+      </tr>
+    </thead>
+    <tbody id="monthly-tbody"></tbody>
+  </table>
+</div>
+
+<div class="section-title">Alle Ladevorgänge</div>
+<div class="chart-card table-wrap">
+  <table id="sessions-table">
+    <thead>
+      <tr>
+        <th>Datum</th>
+        <th>Wochentag</th>
+        <th>Start</th>
+        <th>Ende</th>
+        <th>Dauer</th>
+        <th>kWh</th>
+        <th>Kosten (€)</th>
+      </tr>
+    </thead>
+    <tbody id="sessions-tbody"></tbody>
+  </table>
+  <div class="pagination" id="pagination"></div>
+  <p id="page-info" style="text-align:center; margin-top:0.5rem;"></p>
+</div>
+
+<script>
+const DATA = {"sessions": [{"date": "11.05.2026", "weekday": "Montag", "start": "03:52", "end": "08:15", "duration": "04:23:01", "kwh": 38.9, "cost": 11.67}, {"date": "10.05.2026", "weekday": "Sonntag", "start": "23:56", "end": "00:57", "duration": "01:01:08", "kwh": 9.0, "cost": 2.7}, {"date": "10.05.2026", "weekday": "Sonntag", "start": "22:52", "end": "23:14", "duration": "00:21:39", "kwh": 3.1, "cost": 0.93}, {"date": "10.05.2026", "weekday": "Sonntag", "start": "20:05", "end": "21:08", "duration": "01:03:05", "kwh": 9.3, "cost": 2.79}, {"date": "09.05.2026", "weekday": "Samstag", "start": "23:23", "end": "03:25", "duration": "04:01:55", "kwh": 36.0, "cost": 10.8}, {"date": "08.05.2026", "weekday": "Freitag", "start": "23:49", "end": "03:07", "duration": "03:17:57", "kwh": 29.3, "cost": 8.79}, {"date": "08.05.2026", "weekday": "Freitag", "start": "23:24", "end": "23:40", "duration": "00:15:49", "kwh": 2.2, "cost": 0.66}, {"date": "08.05.2026", "weekday": "Freitag", "start": "15:40", "end": "16:48", "duration": "01:08:23", "kwh": 10.1, "cost": 3.03}, {"date": "08.05.2026", "weekday": "Freitag", "start": "14:16", "end": "14:56", "duration": "00:39:16", "kwh": 5.8, "cost": 1.74}, {"date": "07.05.2026", "weekday": "Donnerstag", "start": "23:02", "end": "03:17", "duration": "04:16:25", "kwh": 37.8, "cost": 11.34}, {"date": "07.05.2026", "weekday": "Donnerstag", "start": "23:01", "end": "23:02", "duration": "00:01:14", "kwh": 0.1, "cost": 0.03}, {"date": "07.05.2026", "weekday": "Donnerstag", "start": "23:00", "end": "23:01", "duration": "00:00:49", "kwh": 0.0, "cost": 0.0}, {"date": "02.05.2026", "weekday": "Samstag", "start": "20:12", "end": "20:17", "duration": "00:05:10", "kwh": 0.8, "cost": 0.24}], "monthly": [{"month": "2026-05", "count": 13, "kwh": 182.4, "cost": 54.72, "current": true}], "chart_labels": ["2026-05"], "chart_kwh": [182.4], "chart_costs": [54.72], "daily_labels": ["2026-05-02", "2026-05-07", "2026-05-08", "2026-05-09", "2026-05-10", "2026-05-11"], "daily_kwh": [0.8, 37.9, 47.4, 36.0, 21.4, 38.9], "stats": {"total_kwh": 182.4, "total_cost": 54.72, "curr_kwh": 182.4, "curr_cost": 54.72, "last_kwh": 0, "last_cost": 0.0, "current_month": "2026-05", "last_month": "2026-04", "last_updated": "11.05.2026 18:11 Uhr", "total_sessions": 13}};
+
+const stats = DATA.stats;
+document.getElementById('last-updated').textContent = 'Letzte Aktualisierung: ' + stats.last_updated;
+document.getElementById('kpi-total-kwh').textContent = stats.total_kwh.toFixed(1) + ' kWh';
+document.getElementById('kpi-total-cost').textContent = stats.total_cost.toFixed(2) + ' € @ 0,30 €/kWh';
+document.getElementById('kpi-curr-kwh').textContent = stats.curr_kwh.toFixed(1) + ' kWh';
+document.getElementById('kpi-curr-cost').textContent = stats.curr_cost.toFixed(2) + ' € (' + stats.current_month + ')';
+document.getElementById('kpi-last-kwh').textContent = stats.last_kwh.toFixed(1) + ' kWh';
+document.getElementById('kpi-last-cost').textContent = stats.last_cost.toFixed(2) + ' € (' + stats.last_month + ')';
+document.getElementById('kpi-sessions').textContent = stats.total_sessions;
+document.getElementById('daily-title').textContent = 'Aktueller Monat (' + stats.current_month + ') – Tagesdetails';
+
+// Monthly bar chart
+new Chart(document.getElementById('monthlyChart'), {
+  type: 'bar',
+  data: {
+    labels: DATA.chart_labels,
+    datasets: [{
+      label: 'kWh',
+      data: DATA.chart_kwh,
+      backgroundColor: '#38bdf8',
+      borderRadius: 6,
+      borderSkipped: false
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const kwh = ctx.parsed.y;
+            const cost = (kwh * 0.30).toFixed(2);
+            return ` ${kwh.toFixed(1)} kWh = ${cost} €`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+      y: { ticks: { color: '#64748b' }, grid: { color: '#334155' }, beginAtZero: true }
+    }
+  }
+});
+
+// Daily line chart
+new Chart(document.getElementById('dailyChart'), {
+  type: 'line',
+  data: {
+    labels: DATA.daily_labels,
+    datasets: [{
+      label: 'kWh',
+      data: DATA.daily_kwh,
+      borderColor: '#38bdf8',
+      backgroundColor: 'rgba(56,189,248,0.1)',
+      tension: 0.3,
+      fill: true,
+      pointBackgroundColor: '#38bdf8',
+      pointRadius: 5
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => ` ${ctx.parsed.y.toFixed(1)} kWh = ${(ctx.parsed.y * 0.30).toFixed(2)} €`
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+      y: { ticks: { color: '#64748b' }, grid: { color: '#334155' }, beginAtZero: true }
+    }
+  }
+});
+
+// Monthly table
+const monthlyTbody = document.getElementById('monthly-tbody');
+DATA.monthly.forEach(m => {
+  const tr = document.createElement('tr');
+  if (m.current) tr.classList.add('highlight-row');
+  tr.innerHTML = `<td>${m.month}</td><td>${m.count}</td><td>${m.kwh.toFixed(1)}</td><td>${m.cost.toFixed(2)} €</td>`;
+  monthlyTbody.appendChild(tr);
+});
+
+// Sessions table with pagination
+const PAGE_SIZE = 25;
+let currentPage = 1;
+const totalPages = Math.ceil(DATA.sessions.length / PAGE_SIZE);
+
+function renderPage(page) {
+  const tbody = document.getElementById('sessions-tbody');
+  tbody.innerHTML = '';
+  const start = (page - 1) * PAGE_SIZE;
+  const slice = DATA.sessions.slice(start, start + PAGE_SIZE);
+  slice.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${s.date}</td><td>${s.weekday}</td><td>${s.start}</td><td>${s.end}</td><td>${s.duration}</td><td>${s.kwh.toFixed(1)}</td><td>${s.cost.toFixed(2)} €</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('page-info').textContent = `Seite ${page} von ${totalPages} (${DATA.sessions.length} Einträge gesamt)`;
+  renderPagination(page);
+}
+
+function renderPagination(page) {
+  const pg = document.getElementById('pagination');
+  pg.innerHTML = '';
+  const btn = (label, p, disabled, active) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (disabled) b.disabled = true;
+    if (active) b.classList.add('active');
+    b.onclick = () => { currentPage = p; renderPage(p); };
+    pg.appendChild(b);
+  };
+  btn('‹', page - 1, page === 1, false);
+  for (let p = 1; p <= totalPages; p++) {
+    if (p === 1 || p === totalPages || Math.abs(p - page) <= 2) btn(p, p, false, p === page);
+    else if (Math.abs(p - page) === 3) { const d = document.createElement('span'); d.textContent = '…'; d.style.color = '#64748b'; pg.appendChild(d); }
+  }
+  btn('›', page + 1, page === totalPages, false);
+}
+
+renderPage(1);
+</script>
+</body>
+</html>
