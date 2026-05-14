@@ -1,7 +1,5 @@
 #!/bin/bash
 # Vollautomatische Pipeline: output.csv → Dashboard → Git Push → Netlify
-# Wird von launchd aufgerufen wenn sich output.csv ändert
-
 REPO_DIR="$HOME/ePropulsion DE Dropbox/Michael Held/01 PRIVAT/Datenaustausch/Tobis Auto/Stromabrechnungen"
 LOG="$REPO_DIR/auto_push.log"
 DATE=$(date '+%Y-%m-%d %H:%M:%S')
@@ -13,27 +11,41 @@ echo "[$DATE] 🔄 Neue output.csv erkannt – starte Pipeline..." >> "$LOG"
 # Lock-Dateien aufräumen
 rm -f .git/index.lock .git/HEAD.lock
 
-# Schritt 1: CSV verarbeiten + data_store.json aktualisieren
+# Schritt 1: CSV verarbeiten – nur mit eingebauten Python-Modulen (kein pandas)
 python3 - << 'PYEOF' >> "$LOG" 2>&1
-import pandas as pd, json, sys
+import csv, json, sys, os
 from datetime import datetime
 from pathlib import Path
-import os
 
-BASE = os.path.expanduser(
-    "~/ePropulsion DE Dropbox/Michael Held/01 PRIVAT/Datenaustausch/Tobis Auto/Stromabrechnungen"
-)
+BASE       = os.path.expanduser("~/ePropulsion DE Dropbox/Michael Held/01 PRIVAT/Datenaustausch/Tobis Auto/Stromabrechnungen")
 CSV_PATH   = f"{BASE}/output.csv"
 STORE_PATH = f"{BASE}/data_store.json"
 
-df_new = pd.read_csv(CSV_PATH)
-df_new.columns = df_new.columns.str.strip()
-df_new = df_new.dropna(subset=["Time", "Charged:(kWh)"])
+# CSV einlesen
+rows = []
+with open(CSV_PATH, newline="", encoding="utf-8-sig") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        row = {k.strip(): v.strip() for k, v in row.items()}
+        if row.get("Time") and row.get("Charged:(kWh)"):
+            try:
+                kwh = float(row["Charged:(kWh)"])
+                rows.append(row)
+            except ValueError:
+                pass
 
-if len(df_new) == 0 or df_new["Charged:(kWh)"].sum() == 0:
-    print("⚠️ CSV leer oder alle kWh=0 – abgebrochen")
+if not rows:
+    print("⚠️ CSV leer oder ungültig – abgebrochen")
     sys.exit(1)
 
+total_kwh = sum(float(r["Charged:(kWh)"]) for r in rows)
+if total_kwh == 0:
+    print("⚠️ Alle kWh-Werte sind 0 – abgebrochen")
+    sys.exit(1)
+
+print(f"CSV: {len(rows)} Zeilen, {total_kwh:.1f} kWh gesamt")
+
+# Store laden
 if Path(STORE_PATH).exists():
     with open(STORE_PATH) as f:
         store = json.load(f)
@@ -42,19 +54,20 @@ else:
     store = {"sessions": [], "last_updated": None, "total_sessions": 0}
     existing_times = set()
 
-if len(df_new) < len(store["sessions"]):
-    print(f"⚠️ CSV ({len(df_new)}) < Store ({len(store['sessions'])}) – CSV ignoriert")
+if len(rows) < len(store["sessions"]):
+    print(f"⚠️ CSV ({len(rows)}) < Store ({len(store['sessions'])}) – CSV ignoriert")
     sys.exit(0)
 
+# Neue Einträge hinzufügen
 new_entries = []
-for _, row in df_new.iterrows():
-    t = str(row["Time"]).strip()
+for row in rows:
+    t = row["Time"]
     if t not in existing_times:
         new_entries.append({
             "time": t,
-            "start": str(row["Start:"]).strip(),
-            "end": str(row["End:"]).strip(),
-            "duration": str(row["Duration:"]).strip(),
+            "start": row.get("Start:", ""),
+            "end":   row.get("End:", ""),
+            "duration": row.get("Duration:", ""),
             "kwh": round(float(row["Charged:(kWh)"]), 2)
         })
 
